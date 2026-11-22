@@ -1,0 +1,36 @@
+services:
+  postgres-db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=transit_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "admin", "-d", "transit_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/transit_db
+#  frontend:
+#    image:
+#    ports:
+#      - "80:80"
+#    volumes:
+#    depends_on:
+#      - backend
+
+volumes:
+  postgres_data:
