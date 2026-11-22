@@ -16,7 +16,7 @@ services:
       retries: 5
       start_period: 1s
   backend:
-    build: .
+    build: ./Backend
     ports:
       - "8080:8080"
     depends_on:
@@ -24,13 +24,14 @@ services:
         condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/transit_db
-#  frontend:
-#    image:
-#    ports:
-#      - "80:80"
-#    volumes:
-#    depends_on:
-#      - backend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
