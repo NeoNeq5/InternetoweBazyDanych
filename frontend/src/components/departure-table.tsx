@@ -1,5 +1,6 @@
-import { routeById, upcomingDepartures, vehicleLabel } from "@/data/network"
+import { upcomingDepartures, vehicleLabel } from "@/data/network"
 import { formatRemaining, formatTime } from "@/lib/format"
+import { useRoutes } from "@/state/routes"
 
 import { LineBadge } from "@/components/line-badge"
 
@@ -14,6 +15,7 @@ export function DepartureTable({
   now: Date
   limit?: number
 }) {
+  const { routeById } = useRoutes()
   const rows = upcomingDepartures(stopId, now, limit)
 
   return (

@@ -1,7 +1,10 @@
-import { routeById, vehicleLabel } from "@/data/network"
 import { cn } from "cn"
 
+import { vehicleLabel } from "@/data/network"
+import { useRoutes } from "@/state/routes"
+
 export function LineBadge({ routeId }: { routeId: string }) {
+  const { routeById } = useRoutes()
   const route = routeById(routeId)
   if (!route) {
     return <span className="tabular-nums">{routeId}</span>

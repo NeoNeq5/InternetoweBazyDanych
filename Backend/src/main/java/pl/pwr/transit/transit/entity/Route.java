@@ -27,7 +27,7 @@ public class Route {
     @Column(name = "short_name", nullable = false)
     private String shortName;
 
-    @Column(name = "long_name", nullable = false)
+    @Column(name = "long_name", nullable = false, length = 512)
     private String longName;
 
     @Enumerated(EnumType.STRING)

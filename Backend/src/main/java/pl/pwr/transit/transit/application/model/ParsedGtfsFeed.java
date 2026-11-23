@@ -1,0 +1,10 @@
+package pl.pwr.transit.transit.application.model;
+
+import java.util.List;
+
+public record ParsedGtfsFeed(
+        List<ParsedRoute> routes,
+        List<ParsedStop> stops,
+        List<ParsedRouteShape> shapes
+) {
+}

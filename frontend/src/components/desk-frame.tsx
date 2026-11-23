@@ -10,7 +10,7 @@ const sections = [
   { id: "pulpit", label: "Pulpit" },
   { id: "portfel", label: "Portfel" },
   { id: "bilety", label: "Bilety" },
-  { id: "przystanki", label: "Przystanki" },
+  { id: "przystanki", label: "Mapa" },
   { id: "mandaty", label: "Mandaty" },
 ] as const
 

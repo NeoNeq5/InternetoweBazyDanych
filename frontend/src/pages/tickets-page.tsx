@@ -4,7 +4,6 @@ import { LineBadge } from "@/components/line-badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/input"
-import { routes, routeById } from "@/data/network"
 import {
   formatDateTime,
   formatMoney,
@@ -18,10 +17,12 @@ import {
   useAccount,
   type PurchasedTicket,
 } from "@/state/account"
+import { useRoutes } from "@/state/routes"
 
 export function TicketsPage() {
   const now = useNow()
   const { tickets, buy } = useAccount()
+  const { routes, loading, error } = useRoutes()
 
   return (
     <div className="lg:grid lg:min-h-[calc(100svh-6.75rem)] lg:grid-cols-12">
@@ -72,7 +73,22 @@ export function TicketsPage() {
       </section>
 
       <section className="lg:col-span-5">
-        <h2 className="px-4 py-4 text-lg font-medium lg:px-6">Kupione</h2>
+        <div className="px-4 py-4 lg:px-6">
+          <h2 className="text-lg font-medium">Kupione</h2>
+          {loading ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ładowanie linii z bazy…
+            </p>
+          ) : null}
+          {error ? (
+            <p className="mt-1 text-sm text-destructive">{error}</p>
+          ) : null}
+          {!loading && !error ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {routes.length} linii z rozkładu GTFS Wrocław.
+            </p>
+          ) : null}
+        </div>
         <ul>
           {tickets.map((ticket) => (
             <TicketRow key={ticket.id} ticket={ticket} now={now} />
@@ -85,6 +101,7 @@ export function TicketsPage() {
 
 function TicketRow({ ticket, now }: { ticket: PurchasedTicket; now: Date }) {
   const { validate } = useAccount()
+  const { routes, routeById, loading } = useRoutes()
   const [routeId, setRouteId] = useState("")
   const tariff = ticketTypeById(ticket.ticketTypeId)
   const route = ticket.routeId ? routeById(ticket.routeId) : undefined
@@ -130,15 +147,22 @@ function TicketRow({ ticket, now }: { ticket: PurchasedTicket; now: Date }) {
             id={`route-${ticket.id}`}
             value={routeId}
             onChange={(event) => setRouteId(event.target.value)}
+            disabled={loading || routes.length === 0}
           >
-            <option value="">Wybierz linię</option>
+            <option value="">
+              {loading ? "Ładowanie linii…" : "Wybierz linię"}
+            </option>
             {routes.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.shortName} · {item.longName}
               </option>
             ))}
           </NativeSelect>
-          <Button type="submit" className="h-10">
+          <Button
+            type="submit"
+            className="h-10"
+            disabled={loading || routes.length === 0}
+          >
             Skasuj
           </Button>
         </form>

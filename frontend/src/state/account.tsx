@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from "react"
 
-import { routeById } from "@/data/network"
 import { formatMoney } from "@/lib/format"
 
 export type TicketType = {
@@ -221,7 +220,7 @@ function seed(): State {
         validTicket: false,
       },
     ],
-    favoriteStopIds: ["plac-grunwaldzki", "dworzec-glowny"],
+    favoriteStopIds: [],
     searches: [
       { id: "s1", query: "Hala Stulecia", searchedAt: atPast(0, 7, 30) },
       { id: "s2", query: "Kromera", searchedAt: atPast(1, 18, 2) },
@@ -300,11 +299,10 @@ function reducer(state: State, action: Action): State {
       const tariff = ticket
         ? ticketTypes.find((item) => item.id === ticket.ticketTypeId)
         : undefined
-      const route = routeById(action.routeId)
       if (!ticket || !tariff || ticket.validatedAt) {
         return state
       }
-      if (!route) {
+      if (!action.routeId.trim()) {
         return {
           ...state,
           notice: "Wybierz linię, na której kasujesz bilet.",
@@ -321,11 +319,11 @@ function reducer(state: State, action: Action): State {
                 ...item,
                 validatedAt: action.at,
                 expiresAt,
-                routeId: route.id,
+                routeId: action.routeId,
               }
             : item
         ),
-        notice: `${ticket.code} skasowany na linii ${route.shortName}. Ważny do ${new Date(expiresAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}.`,
+        notice: `${ticket.code} skasowany na linii ${action.routeId}. Ważny do ${new Date(expiresAt).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })}.`,
       }
     }
     case "pay": {

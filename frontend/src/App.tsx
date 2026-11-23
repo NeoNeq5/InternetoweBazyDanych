@@ -8,11 +8,17 @@ import { StopsPage } from "@/pages/stops-page"
 import { TicketsPage } from "@/pages/tickets-page"
 import { WalletPage } from "@/pages/wallet-page"
 import { AccountProvider, useAccount } from "@/state/account"
+import { RoutesProvider } from "@/state/routes"
+import { StopsProvider } from "@/state/stops"
 
 export function App() {
   return (
     <AccountProvider>
-      <Root />
+      <RoutesProvider>
+        <StopsProvider>
+          <Root />
+        </StopsProvider>
+      </RoutesProvider>
     </AccountProvider>
   )
 }

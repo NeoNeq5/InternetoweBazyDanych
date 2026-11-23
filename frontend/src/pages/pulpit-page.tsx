@@ -4,11 +4,12 @@ import { DepartureTable } from "@/components/departure-table"
 import type { SectionId } from "@/components/desk-frame"
 import { LineBadge } from "@/components/line-badge"
 import { Button } from "@/components/ui/button"
-import { routeById, stopById } from "@/data/network"
 import { formatDateTime, formatMoney, formatRemaining } from "@/lib/format"
 import { useNow } from "@/lib/use-now"
 import { cn } from "cn"
 import { ticketTypeById, useAccount } from "@/state/account"
+import { useRoutes } from "@/state/routes"
+import { useStops } from "@/state/stops"
 
 export function PulpitPage({
   onSection,
@@ -17,12 +18,12 @@ export function PulpitPage({
 }) {
   const now = useNow()
   const { balanceCents, tickets, penalties, favoriteStopIds } = useAccount()
+  const { routeById } = useRoutes()
+  const { stopById } = useStops()
   const favorites = favoriteStopIds
     .map((id) => stopById(id))
     .filter((stop) => stop !== undefined)
-  const [selectedId, setSelectedId] = useState(
-    favorites[0]?.id ?? "plac-grunwaldzki"
-  )
+  const [selectedId, setSelectedId] = useState(favorites[0]?.id ?? "")
   const selected =
     favorites.find((stop) => stop.id === selectedId) ?? favorites[0]
 

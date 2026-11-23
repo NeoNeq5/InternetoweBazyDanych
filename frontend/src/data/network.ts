@@ -1,12 +1,5 @@
 export type VehicleType = "TRAM" | "BUS"
 
-export type Route = {
-  id: string
-  shortName: string
-  longName: string
-  vehicleType: VehicleType
-}
-
 export type Stop = {
   id: string
   name: string
@@ -28,57 +21,6 @@ export type Departure = {
   headsign: string
   at: Date
 }
-
-export const routes: Route[] = [
-  {
-    id: "4",
-    shortName: "4",
-    longName: "Biskupin – Grabiszynek",
-    vehicleType: "TRAM",
-  },
-  {
-    id: "8",
-    shortName: "8",
-    longName: "Karłowice – Tarnogaj",
-    vehicleType: "TRAM",
-  },
-  {
-    id: "10",
-    shortName: "10",
-    longName: "Leśnica – Biskupin",
-    vehicleType: "TRAM",
-  },
-  {
-    id: "17",
-    shortName: "17",
-    longName: "Sępolno – Klecina",
-    vehicleType: "TRAM",
-  },
-  {
-    id: "33",
-    shortName: "33",
-    longName: "Pilczyce – Sępolno",
-    vehicleType: "TRAM",
-  },
-  {
-    id: "A",
-    shortName: "A",
-    longName: "Osobowice – Gaj",
-    vehicleType: "BUS",
-  },
-  {
-    id: "K",
-    shortName: "K",
-    longName: "Kozanów – Księże Małe",
-    vehicleType: "BUS",
-  },
-  {
-    id: "145",
-    shortName: "145",
-    longName: "Nowy Dwór – Zakrzów",
-    vehicleType: "BUS",
-  },
-]
 
 export const stops: Stop[] = [
   {
@@ -159,10 +101,6 @@ function service(
   offsetMinutes: number
 ): Service {
   return { stopId, routeId, headsign, headwayMinutes, offsetMinutes }
-}
-
-export function routeById(id: string) {
-  return routes.find((route) => route.id === id)
 }
 
 export function stopById(id: string) {

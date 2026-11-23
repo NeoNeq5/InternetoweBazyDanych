@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button"
-import { routeById } from "@/data/network"
 import { formatDateTime, formatMoney } from "@/lib/format"
 import { penaltyStatusLabel, useAccount } from "@/state/account"
+import { useRoutes } from "@/state/routes"
 
 export function PenaltiesPage() {
   const { penalties, balanceCents, pay } = useAccount()
+  const { routeById } = useRoutes()
 
   return (
     <div>
