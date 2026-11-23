@@ -14,6 +14,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import pl.pwr.transit.users.entity.User;
 
 import java.math.BigDecimal;
@@ -36,7 +38,8 @@ public class WalletTransaction {
     private User user;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "type", nullable = false)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "type", columnDefinition = "transaction_type", nullable = false)
     private TransactionType type;
 
     @ManyToOne(fetch = FetchType.LAZY)

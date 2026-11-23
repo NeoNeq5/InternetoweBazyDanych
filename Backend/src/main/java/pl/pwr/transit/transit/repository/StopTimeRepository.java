@@ -17,7 +17,7 @@ public interface StopTimeRepository extends JpaRepository<StopTime, StopTimeId> 
                    t.trip_id,
                    r.route_id,
                    r.short_name,
-                   r.vehicle_type,
+                   r.vehicle_type_code,
                    t.direction_id
             from stop_times st
             join trips t on t.trip_id = st.trip_id
@@ -42,7 +42,7 @@ public interface StopTimeRepository extends JpaRepository<StopTime, StopTimeId> 
                    t.trip_id,
                    r.route_id,
                    r.short_name,
-                   r.vehicle_type,
+                   r.vehicle_type_code,
                    t.direction_id
             from stop_times st
             join trips t on t.trip_id = st.trip_id
@@ -68,7 +68,7 @@ public interface StopTimeRepository extends JpaRepository<StopTime, StopTimeId> 
                    t.trip_id,
                    r.route_id,
                    r.short_name,
-                   r.vehicle_type,
+                   r.vehicle_type_code,
                    t.direction_id
             from stop_times st
             join trips t on t.trip_id = st.trip_id

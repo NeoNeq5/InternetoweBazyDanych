@@ -29,6 +29,10 @@ public class Trip {
     @Column(name = "service_id", nullable = false)
     private String serviceId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "service_id", insertable = false, updatable = false)
+    private GtfsService service;
+
     @Column(name = "direction_id", nullable = false)
     private short directionId;
 
@@ -38,7 +42,7 @@ public class Trip {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "last_import_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "last_import_id", nullable = false)
     private GtfsImport lastImport;
 }

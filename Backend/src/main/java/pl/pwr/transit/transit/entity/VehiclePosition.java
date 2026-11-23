@@ -2,8 +2,6 @@ package pl.pwr.transit.transit.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -35,9 +33,12 @@ public class VehiclePosition {
     @Column(name = "line", nullable = false)
     private String line;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "vehicle_type", nullable = false)
-    private VehicleType vehicleType;
+    @Column(name = "vehicle_type_code", nullable = false)
+    private String vehicleTypeCode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vehicle_type_code", insertable = false, updatable = false)
+    private VehicleTypeEntity vehicleTypeRef;
 
     @Column(name = "lat", nullable = false)
     private double lat;
@@ -55,4 +56,12 @@ public class VehiclePosition {
 
     @Column(name = "fetched_at", nullable = false)
     private Instant fetchedAt;
+
+    public VehicleType getVehicleType() {
+        return VehicleType.fromCode(vehicleTypeCode);
+    }
+
+    public void setVehicleType(VehicleType vehicleType) {
+        this.vehicleTypeCode = vehicleType.getCode();
+    }
 }

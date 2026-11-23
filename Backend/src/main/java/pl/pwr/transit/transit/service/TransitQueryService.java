@@ -203,7 +203,7 @@ public class TransitQueryService {
             String tripId = String.valueOf(row[2]);
             String rowRouteId = String.valueOf(row[3]);
             String routeShortName = String.valueOf(row[4]);
-            VehicleType vehicleType = VehicleType.valueOf(String.valueOf(row[5]));
+            VehicleType vehicleType = VehicleType.fromCode(String.valueOf(row[5]));
             short rowDirectionId = ((Number) row[6]).shortValue();
             long minutesUntil = Math.max(0, (departure.getSeconds() - from.getSeconds() + 59) / 60);
             departures.add(new DepartureResponse(

@@ -42,8 +42,8 @@ public class Stop {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "last_import_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "last_import_id", nullable = false)
     private GtfsImport lastImport;
 
     @OneToMany(mappedBy = "stop", fetch = FetchType.LAZY)

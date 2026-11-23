@@ -10,10 +10,13 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import pl.pwr.transit.users.entity.User;
 
 import java.math.BigDecimal;
@@ -31,8 +34,8 @@ public class Penalty {
     @Column(name = "penalty_id")
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "inspection_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "inspection_id", nullable = false, unique = true)
     private Inspection inspection;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -52,7 +55,8 @@ public class Penalty {
     private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", columnDefinition = "penalty_status", nullable = false)
     private PenaltyStatus status;
 
     @Column(name = "due_date", nullable = false)

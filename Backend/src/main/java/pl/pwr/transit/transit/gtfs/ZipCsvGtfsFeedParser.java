@@ -433,7 +433,8 @@ public class ZipCsvGtfsFeedParser {
 
     private static VehicleType toVehicleType(int routeType) {
         return switch (routeType) {
-            case 0, 1, 2, 5, 7, 12 -> VehicleType.TRAM;
+            case 0, 5, 7, 12 -> VehicleType.TRAM;
+            case 1, 2 -> VehicleType.METRO;
             default -> VehicleType.BUS;
         };
     }

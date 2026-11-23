@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import pl.pwr.transit.transit.entity.GtfsImport;
+import pl.pwr.transit.transit.entity.GtfsService;
 import pl.pwr.transit.transit.entity.ImportStatus;
 import pl.pwr.transit.transit.entity.Route;
 import pl.pwr.transit.transit.entity.RouteShape;
@@ -29,6 +30,7 @@ import pl.pwr.transit.transit.repository.RouteRepository;
 import pl.pwr.transit.transit.repository.RouteShapeRepository;
 import pl.pwr.transit.transit.repository.RouteStopRepository;
 import pl.pwr.transit.transit.repository.ServiceDateRepository;
+import pl.pwr.transit.transit.repository.ServiceRepository;
 import pl.pwr.transit.transit.repository.StopRepository;
 import pl.pwr.transit.transit.repository.TripRepository;
 import tools.jackson.databind.ObjectMapper;
@@ -58,6 +60,7 @@ public class GtfsImportService {
     private final RouteShapeRepository routeShapeRepository;
     private final TripRepository tripRepository;
     private final RouteStopRepository routeStopRepository;
+    private final ServiceRepository serviceRepository;
     private final ServiceDateRepository serviceDateRepository;
     private final JdbcStopTimeImporter stopTimeImporter;
     private final TransactionTemplate transactionTemplate;
@@ -72,6 +75,7 @@ public class GtfsImportService {
             RouteShapeRepository routeShapeRepository,
             TripRepository tripRepository,
             RouteStopRepository routeStopRepository,
+            ServiceRepository serviceRepository,
             ServiceDateRepository serviceDateRepository,
             JdbcStopTimeImporter stopTimeImporter,
             TransactionTemplate transactionTemplate,
@@ -85,6 +89,7 @@ public class GtfsImportService {
         this.routeShapeRepository = routeShapeRepository;
         this.tripRepository = tripRepository;
         this.routeStopRepository = routeStopRepository;
+        this.serviceRepository = serviceRepository;
         this.serviceDateRepository = serviceDateRepository;
         this.stopTimeImporter = stopTimeImporter;
         this.transactionTemplate = transactionTemplate;
@@ -143,6 +148,9 @@ public class GtfsImportService {
             persistStops(feed, managedImport);
             persistShapes(feed, managedImport);
             stopTimeImporter.clear();
+            tripRepository.deleteAllTrips();
+            serviceDateRepository.deleteAllServiceDates();
+            persistServices(feed);
             persistTrips(feed, managedImport);
             persistRouteStops(feed);
             persistServiceDates(feed);
@@ -240,8 +248,23 @@ public class GtfsImportService {
         return Math.round(value * 1_000_000.0) / 1_000_000.0;
     }
 
+    private void persistServices(ParsedGtfsFeed feed) {
+        Set<String> serviceIds = new HashSet<>();
+        for (ParsedTrip trip : feed.trips()) {
+            serviceIds.add(trip.serviceId());
+        }
+        for (ParsedServiceDate date : feed.serviceDates()) {
+            serviceIds.add(date.serviceId());
+        }
+        for (String serviceId : serviceIds) {
+            if (!serviceRepository.existsById(serviceId)) {
+                serviceRepository.save(new GtfsService(serviceId, null));
+            }
+        }
+        serviceRepository.flush();
+    }
+
     private void persistTrips(ParsedGtfsFeed feed, GtfsImport importRecord) {
-        tripRepository.deleteAllTrips();
         Map<String, Route> routes = new HashMap<>();
         List<Trip> batch = new ArrayList<>(500);
         for (ParsedTrip parsed : feed.trips()) {
@@ -296,7 +319,6 @@ public class GtfsImportService {
     }
 
     private void persistServiceDates(ParsedGtfsFeed feed) {
-        serviceDateRepository.deleteAllServiceDates();
         List<ServiceDate> batch = new ArrayList<>(500);
         for (ParsedServiceDate parsed : feed.serviceDates()) {
             ServiceDate serviceDate = new ServiceDate();

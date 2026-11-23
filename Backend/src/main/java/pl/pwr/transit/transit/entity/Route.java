@@ -2,8 +2,6 @@ package pl.pwr.transit.transit.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -31,20 +29,31 @@ public class Route {
     @Column(name = "short_name", nullable = false)
     private String shortName;
 
-    @Column(name = "long_name", nullable = false, length = 512)
+    @Column(name = "long_name")
     private String longName;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "vehicle_type", nullable = false)
-    private VehicleType vehicleType;
+    @Column(name = "vehicle_type_code", nullable = false)
+    private String vehicleTypeCode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vehicle_type_code", insertable = false, updatable = false)
+    private VehicleTypeEntity vehicleTypeRef;
 
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "last_import_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "last_import_id", nullable = false)
     private GtfsImport lastImport;
 
     @OneToMany(mappedBy = "route", fetch = FetchType.LAZY)
     private Set<RouteStop> stopLinks = new HashSet<>();
+
+    public VehicleType getVehicleType() {
+        return VehicleType.fromCode(vehicleTypeCode);
+    }
+
+    public void setVehicleType(VehicleType vehicleType) {
+        this.vehicleTypeCode = vehicleType.getCode();
+    }
 }

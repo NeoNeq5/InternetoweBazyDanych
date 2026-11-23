@@ -21,6 +21,7 @@ import pl.pwr.transit.transit.repository.RouteRepository;
 import pl.pwr.transit.transit.repository.RouteShapeRepository;
 import pl.pwr.transit.transit.repository.RouteStopRepository;
 import pl.pwr.transit.transit.repository.ServiceDateRepository;
+import pl.pwr.transit.transit.repository.ServiceRepository;
 import pl.pwr.transit.transit.repository.StopRepository;
 import pl.pwr.transit.transit.repository.TripRepository;
 import tools.jackson.databind.ObjectMapper;
@@ -57,6 +58,8 @@ class GtfsImportServiceTest {
     private TripRepository tripRepository;
     @Mock
     private RouteStopRepository routeStopRepository;
+    @Mock
+    private ServiceRepository serviceRepository;
     @Mock
     private ServiceDateRepository serviceDateRepository;
     @Mock
@@ -97,6 +100,7 @@ class GtfsImportServiceTest {
                 routeShapeRepository,
                 tripRepository,
                 routeStopRepository,
+                serviceRepository,
                 serviceDateRepository,
                 stopTimeImporter,
                 txTemplate,
