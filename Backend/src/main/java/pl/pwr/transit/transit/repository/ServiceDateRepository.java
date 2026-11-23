@@ -20,18 +20,11 @@ public interface ServiceDateRepository extends JpaRepository<ServiceDate, Servic
     List<String> findServiceIdsByDate(@Param("date") LocalDate date);
 
     @Query("""
-            select max(sd.id.serviceDate)
+            select distinct sd.id.serviceDate
             from ServiceDate sd
-            where sd.id.serviceDate <= :date
+            order by sd.id.serviceDate asc
             """)
-    LocalDate findLatestDateOnOrBefore(@Param("date") LocalDate date);
-
-    @Query("""
-            select min(sd.id.serviceDate)
-            from ServiceDate sd
-            where sd.id.serviceDate >= :date
-            """)
-    LocalDate findEarliestDateOnOrAfter(@Param("date") LocalDate date);
+    List<LocalDate> findDistinctServiceDates();
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from ServiceDate sd")

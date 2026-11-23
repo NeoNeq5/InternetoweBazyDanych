@@ -1,7 +1,6 @@
-package pl.pwr.transit.transit.infrastructure.gtfs;
+package pl.pwr.transit.transit.gtfs;
 
 import org.junit.jupiter.api.Test;
-import pl.pwr.transit.transit.application.model.ParsedGtfsFeed;
 import pl.pwr.transit.transit.entity.VehicleType;
 
 import java.io.ByteArrayOutputStream;

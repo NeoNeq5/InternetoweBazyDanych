@@ -1,15 +1,6 @@
-package pl.pwr.transit.transit.infrastructure.gtfs;
+package pl.pwr.transit.transit.gtfs;
 
 import org.springframework.stereotype.Component;
-import pl.pwr.transit.transit.application.model.LatLon;
-import pl.pwr.transit.transit.application.model.ParsedGtfsFeed;
-import pl.pwr.transit.transit.application.model.ParsedRoute;
-import pl.pwr.transit.transit.application.model.ParsedRouteShape;
-import pl.pwr.transit.transit.application.model.ParsedRouteStop;
-import pl.pwr.transit.transit.application.model.ParsedServiceDate;
-import pl.pwr.transit.transit.application.model.ParsedStop;
-import pl.pwr.transit.transit.application.model.ParsedTrip;
-import pl.pwr.transit.transit.application.port.GtfsFeedParser;
 import pl.pwr.transit.transit.entity.VehicleType;
 
 import java.io.BufferedReader;
@@ -21,6 +12,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -31,12 +23,11 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 @Component
-public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
+public class ZipCsvGtfsFeedParser {
 
     private static final int MAX_SHAPE_POINTS = 400;
     private static final DateTimeFormatter GTFS_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
-    @Override
     public ParsedGtfsFeed parse(byte[] archiveBytes) {
         Map<String, byte[]> files = readEntries(archiveBytes);
         byte[] tripsContent = requireFile(files, "trips.txt");
@@ -353,7 +344,7 @@ public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
         Map<String, List<LatLon>> shapes = new HashMap<>(buffered.size());
         for (Map.Entry<String, List<ShapePoint>> entry : buffered.entrySet()) {
             List<ShapePoint> points = entry.getValue();
-            points.sort(java.util.Comparator.comparingInt(ShapePoint::sequence));
+            points.sort(Comparator.comparingInt(ShapePoint::sequence));
             List<LatLon> coords = new ArrayList<>(points.size());
             for (ShapePoint point : points) {
                 coords.add(point.coord());

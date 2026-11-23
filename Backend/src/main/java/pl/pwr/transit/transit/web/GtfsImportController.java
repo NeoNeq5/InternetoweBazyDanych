@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import pl.pwr.transit.transit.application.GtfsImportService;
+import pl.pwr.transit.transit.service.GtfsImportService;
 import pl.pwr.transit.transit.web.dto.GtfsImportResponse;
 
 @RestController

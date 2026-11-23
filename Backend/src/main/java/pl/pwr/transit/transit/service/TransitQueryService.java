@@ -1,22 +1,28 @@
-package pl.pwr.transit.transit.application;
+package pl.pwr.transit.transit.service;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.pwr.transit.transit.entity.Route;
+import pl.pwr.transit.transit.entity.RouteShape;
 import pl.pwr.transit.transit.entity.RouteStop;
+import pl.pwr.transit.transit.entity.Stop;
 import pl.pwr.transit.transit.entity.VehicleType;
 import pl.pwr.transit.transit.repository.RouteRepository;
+import pl.pwr.transit.transit.repository.RouteShapeRepository;
 import pl.pwr.transit.transit.repository.RouteStopRepository;
 import pl.pwr.transit.transit.repository.ServiceDateRepository;
 import pl.pwr.transit.transit.repository.StopRepository;
 import pl.pwr.transit.transit.repository.StopTimeRepository;
 import pl.pwr.transit.transit.repository.TripRepository;
 import pl.pwr.transit.transit.web.dto.DepartureResponse;
+import pl.pwr.transit.transit.web.dto.RouteShapeResponse;
 import pl.pwr.transit.transit.web.dto.StopResponse;
 import pl.pwr.transit.transit.web.dto.StopRouteResponse;
 import pl.pwr.transit.transit.web.dto.TripStopResponse;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -29,31 +35,61 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class NetworkQueryService {
+public class TransitQueryService {
 
     private static final ZoneId WARSAW = ZoneId.of("Europe/Warsaw");
+    private static final TypeReference<List<List<Double>>> POINTS_TYPE = new TypeReference<>() {
+    };
 
     private final StopRepository stopRepository;
     private final RouteRepository routeRepository;
+    private final RouteShapeRepository routeShapeRepository;
     private final RouteStopRepository routeStopRepository;
     private final ServiceDateRepository serviceDateRepository;
     private final StopTimeRepository stopTimeRepository;
     private final TripRepository tripRepository;
+    private final ObjectMapper objectMapper;
 
-    public NetworkQueryService(
+    public TransitQueryService(
             StopRepository stopRepository,
             RouteRepository routeRepository,
+            RouteShapeRepository routeShapeRepository,
             RouteStopRepository routeStopRepository,
             ServiceDateRepository serviceDateRepository,
             StopTimeRepository stopTimeRepository,
-            TripRepository tripRepository
+            TripRepository tripRepository,
+            ObjectMapper objectMapper
     ) {
         this.stopRepository = stopRepository;
         this.routeRepository = routeRepository;
+        this.routeShapeRepository = routeShapeRepository;
         this.routeStopRepository = routeStopRepository;
         this.serviceDateRepository = serviceDateRepository;
         this.stopTimeRepository = stopTimeRepository;
         this.tripRepository = tripRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Route> findActiveRoutes() {
+        return routeRepository.findByActiveTrueOrderByShortNameAsc().stream()
+                .sorted(routeDisplayOrder())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Stop> findActiveStops() {
+        return stopRepository.findByActiveTrueOrderByNameAsc();
+    }
+
+    @Transactional(readOnly = true)
+    public List<RouteShapeResponse> routeShapes(String routeId) {
+        if (!routeRepository.existsById(routeId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Route not found: " + routeId);
+        }
+        return routeShapeRepository.findByRouteIdOrderByDirectionIdAsc(routeId).stream()
+                .map(this::toShapeResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -128,8 +164,8 @@ public class NetworkQueryService {
             return List.of();
         }
 
-        // Use wall-clock "now" even when falling back to the nearest GTFS service day.
-        Duration from = Duration.between(today.atStartOfDay(WARSAW), now);
+        // Use wall-clock "now" in Warsaw even when falling back to another GTFS service day.
+        Duration from = Duration.ofSeconds(now.toLocalTime().toSecondOfDay());
         String fromLiteral = from.getSeconds() + " seconds";
         int clampedLimit = Math.min(Math.max(limit, 1), 30);
 
@@ -191,8 +227,7 @@ public class NetworkQueryService {
         }
 
         ZonedDateTime now = ZonedDateTime.now(WARSAW);
-        LocalDate today = now.toLocalDate();
-        Duration from = Duration.between(today.atStartOfDay(WARSAW), now);
+        Duration from = Duration.ofSeconds(now.toLocalTime().toSecondOfDay());
 
         List<Object[]> rows = stopTimeRepository.findStopsForTrip(tripId);
         List<TripStopResponse> stops = new ArrayList<>(rows.size());
@@ -222,22 +257,70 @@ public class NetworkQueryService {
         return stops;
     }
 
+    private RouteShapeResponse toShapeResponse(RouteShape shape) {
+        String json = shape.getPointsJson();
+        List<List<Double>> points = (json == null || json.isBlank())
+                ? List.of()
+                : objectMapper.readValue(json, POINTS_TYPE);
+        return new RouteShapeResponse(shape.getDirectionId(), points);
+    }
+
     private LocalDate resolveServiceDay(LocalDate today) {
         List<String> todayServices = serviceDateRepository.findServiceIdsByDate(today);
         if (!todayServices.isEmpty()) {
             return today;
         }
-        LocalDate previous = serviceDateRepository.findLatestDateOnOrBefore(today);
-        if (previous != null) {
-            return previous;
+        List<LocalDate> dates = serviceDateRepository.findDistinctServiceDates();
+        if (dates.isEmpty()) {
+            return null;
         }
-        return serviceDateRepository.findEarliestDateOnOrAfter(today);
+        // Prefer the closest date with the same day of week so weekdays never fall back to Sunday schedules.
+        LocalDate sameWeekdayBefore = null;
+        LocalDate sameWeekdayAfter = null;
+        LocalDate latestBefore = null;
+        LocalDate earliestAfter = null;
+        for (LocalDate candidate : dates) {
+            if (!candidate.isAfter(today)) {
+                latestBefore = candidate;
+                if (candidate.getDayOfWeek() == today.getDayOfWeek()) {
+                    sameWeekdayBefore = candidate;
+                }
+            } else {
+                if (earliestAfter == null) {
+                    earliestAfter = candidate;
+                }
+                if (sameWeekdayAfter == null && candidate.getDayOfWeek() == today.getDayOfWeek()) {
+                    sameWeekdayAfter = candidate;
+                }
+            }
+        }
+        if (sameWeekdayBefore != null) {
+            return sameWeekdayBefore;
+        }
+        if (sameWeekdayAfter != null) {
+            return sameWeekdayAfter;
+        }
+        return latestBefore != null ? latestBefore : earliestAfter;
     }
 
     private void requireStop(String stopId) {
         if (!stopRepository.existsById(stopId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Stop not found: " + stopId);
         }
+    }
+
+    private static Comparator<Route> routeDisplayOrder() {
+        return Comparator
+                .comparingInt((Route route) -> route.getVehicleType() == VehicleType.TRAM ? 0 : 1)
+                .thenComparing(route -> naturalKey(route.getShortName()))
+                .thenComparing(Route::getShortName);
+    }
+
+    private static String naturalKey(String shortName) {
+        if (shortName.chars().allMatch(Character::isDigit)) {
+            return String.format("%05d", Integer.parseInt(shortName));
+        }
+        return shortName;
     }
 
     private static Duration toDuration(Object value) {

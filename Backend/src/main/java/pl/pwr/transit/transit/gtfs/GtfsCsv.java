@@ -1,4 +1,4 @@
-package pl.pwr.transit.transit.infrastructure.gtfs;
+package pl.pwr.transit.transit.gtfs;
 
 import java.util.ArrayList;
 import java.util.HashMap;

@@ -1,4 +1,4 @@
-package pl.pwr.transit.transit.infrastructure.gtfs;
+package pl.pwr.transit.transit.gtfs;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +34,6 @@ public class JdbcStopTimeImporter {
     }
 
     public int importFromArchive(byte[] archiveBytes) {
-        clear();
         byte[] content = readEntry(archiveBytes, "stop_times.txt");
         int total = 0;
         List<Object[]> batch = new ArrayList<>(BATCH_SIZE);

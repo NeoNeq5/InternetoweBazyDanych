@@ -1,6 +1,6 @@
 package pl.pwr.transit.transit.web.dto;
 
-import pl.pwr.transit.transit.application.GtfsImportResult;
+import pl.pwr.transit.transit.service.GtfsImportResult;
 
 public record GtfsImportResponse(
         Long importId,

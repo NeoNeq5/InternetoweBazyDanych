@@ -1,7 +1,6 @@
 package pl.pwr.transit.transit.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import pl.pwr.transit.transit.entity.StopTime;
@@ -105,8 +104,4 @@ public interface StopTimeRepository extends JpaRepository<StopTime, StopTimeId> 
             order by st.stop_sequence
             """, nativeQuery = true)
     List<Object[]> findStopsForTrip(@Param("tripId") String tripId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("delete from StopTime st")
-    int deleteAllStopTimes();
 }

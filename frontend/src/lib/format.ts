@@ -67,3 +67,7 @@ export function formatValidity(minutes: number) {
 
   return `${minutes} min`
 }
+
+export function vehicleLabel(vehicleType: "TRAM" | "BUS") {
+  return vehicleType === "TRAM" ? "Tramwaj" : "Autobus"
+}

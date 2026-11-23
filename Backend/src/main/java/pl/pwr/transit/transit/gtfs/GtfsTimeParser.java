@@ -1,4 +1,4 @@
-package pl.pwr.transit.transit.infrastructure.gtfs;
+package pl.pwr.transit.transit.gtfs;
 
 import java.time.Duration;
 
@@ -20,13 +20,5 @@ final class GtfsTimeParser {
 
     static String toIntervalLiteral(Duration duration) {
         return duration.getSeconds() + " seconds";
-    }
-
-    static String toClock(Duration duration) {
-        long total = duration.getSeconds();
-        long hours = total / 3600;
-        long minutes = (total % 3600) / 60;
-        long seconds = total % 60;
-        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 }

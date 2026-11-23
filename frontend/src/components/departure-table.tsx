@@ -1,8 +1,14 @@
-import { upcomingDepartures, vehicleLabel } from "@/data/network"
-import { formatRemaining, formatTime } from "@/lib/format"
-import { useRoutes } from "@/state/routes"
+import { useEffect, useState } from "react"
+import { cn } from "cn"
 
-import { LineBadge } from "@/components/line-badge"
+import { fetchDepartures, type DepartureDto } from "@/api/network"
+import { formatRemaining, vehicleLabel } from "@/lib/format"
+
+type FetchState = {
+  key: string
+  rows: DepartureDto[]
+  error: string | null
+}
 
 export function DepartureTable({
   stopId,
@@ -15,8 +21,59 @@ export function DepartureTable({
   now: Date
   limit?: number
 }) {
-  const { routeById } = useRoutes()
-  const rows = upcomingDepartures(stopId, now, limit)
+  const minuteBucket = Math.floor(now.getTime() / 60_000)
+  const requestKey = `${stopId}:${limit}:${minuteBucket}`
+  const [state, setState] = useState<FetchState>({
+    key: "",
+    rows: [],
+    error: null,
+  })
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchDepartures(stopId, { limit }, controller.signal)
+      .then((rows) => {
+        setState({ key: requestKey, rows, error: null })
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) {
+          return
+        }
+        setState({
+          key: requestKey,
+          rows: [],
+          error:
+            err instanceof Error ? err.message : "Nie udało się pobrać odjazdów",
+        })
+      })
+    return () => controller.abort()
+  }, [limit, requestKey, stopId])
+
+  const loading = state.key !== requestKey && state.rows.length === 0
+  const rows = state.key.startsWith(`${stopId}:${limit}:`) ? state.rows : []
+  const error = state.key === requestKey ? state.error : null
+
+  if (error) {
+    return (
+      <p className="px-4 py-4 text-sm text-destructive lg:px-6">{error}</p>
+    )
+  }
+
+  if (loading) {
+    return (
+      <p className="px-4 py-4 text-sm text-muted-foreground lg:px-6">
+        Pobieranie odjazdów…
+      </p>
+    )
+  }
+
+  if (rows.length === 0) {
+    return (
+      <p className="px-4 py-4 text-sm text-muted-foreground lg:px-6">
+        Brak zaplanowanych odjazdów na dziś z tego przystanku.
+      </p>
+    )
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -33,24 +90,40 @@ export function DepartureTable({
         </thead>
         <tbody>
           {rows.map((row) => {
-            const route = routeById(row.routeId)
+            const isTram = row.vehicleType === "TRAM"
             return (
               <tr
-                key={`${row.routeId}-${row.headsign}-${row.at.getTime()}`}
+                key={`${row.tripId}-${row.departureTime}`}
                 className="border-b last:border-b-0 hover:bg-muted"
               >
                 <td className="px-4 py-2.5 font-medium tabular-nums">
-                  {formatTime(row.at)}
+                  {row.departureTime}
                 </td>
                 <td className="px-2 py-2.5">
-                  <LineBadge routeId={row.routeId} />
+                  <span
+                    className={cn(
+                      "inline-grid min-w-8 place-items-center px-1.5 py-0.5 text-xs font-medium tabular-nums",
+                      isTram
+                        ? "bg-tram text-primary-foreground"
+                        : "bg-bus text-bus-foreground"
+                    )}
+                  >
+                    <span className="sr-only">
+                      {vehicleLabel(row.vehicleType)}{" "}
+                    </span>
+                    {row.routeShortName}
+                  </span>
                 </td>
                 <td className="px-2 py-2.5 text-muted-foreground">
-                  {route ? vehicleLabel(route.vehicleType) : "—"}
+                  {vehicleLabel(row.vehicleType)}
                 </td>
-                <td className="px-2 py-2.5">{row.headsign}</td>
+                <td className="px-2 py-2.5">
+                  {row.headsign || "Bez kierunku"}
+                </td>
                 <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
-                  {formatRemaining(row.at.getTime() - now.getTime())}
+                  {row.minutesUntil <= 0
+                    ? "teraz"
+                    : formatRemaining(row.minutesUntil * 60_000)}
                 </td>
               </tr>
             )

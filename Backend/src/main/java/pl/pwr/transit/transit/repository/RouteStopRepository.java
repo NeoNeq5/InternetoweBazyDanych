@@ -12,14 +12,6 @@ import java.util.List;
 
 public interface RouteStopRepository extends JpaRepository<RouteStop, RouteStopId> {
 
-    @Query("""
-            select distinct rs.routeId
-            from RouteStop rs
-            where rs.stopId = :stopId
-            order by rs.routeId
-            """)
-    List<String> findRouteIdsByStopId(@Param("stopId") String stopId);
-
     List<RouteStop> findByStopIdOrderByRouteIdAscDirectionIdAsc(String stopId);
 
     @Query("""
@@ -33,14 +25,6 @@ public interface RouteStopRepository extends JpaRepository<RouteStop, RouteStopI
             @Param("routeId") String routeId,
             @Param("directionId") short directionId
     );
-
-    @Query("""
-            select distinct rs.directionId
-            from RouteStop rs
-            where rs.routeId = :routeId and rs.stopId = :stopId
-            order by rs.directionId
-            """)
-    List<Short> findDirectionIds(@Param("routeId") String routeId, @Param("stopId") String stopId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from RouteStop rs")

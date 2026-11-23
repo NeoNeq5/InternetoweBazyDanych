@@ -1,4 +1,4 @@
-package pl.pwr.transit.transit.application;
+package pl.pwr.transit.transit.service;
 
 public record GtfsImportResult(
         Long importId,

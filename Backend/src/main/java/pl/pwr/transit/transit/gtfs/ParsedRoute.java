@@ -1,4 +1,4 @@
-package pl.pwr.transit.transit.application.model;
+package pl.pwr.transit.transit.gtfs;
 
 import pl.pwr.transit.transit.entity.VehicleType;
 

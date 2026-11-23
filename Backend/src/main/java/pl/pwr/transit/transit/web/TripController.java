@@ -4,7 +4,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import pl.pwr.transit.transit.application.NetworkQueryService;
+import pl.pwr.transit.transit.service.TransitQueryService;
 import pl.pwr.transit.transit.web.dto.TripStopResponse;
 
 import java.util.List;
@@ -13,14 +13,14 @@ import java.util.List;
 @RequestMapping("/api/trips")
 public class TripController {
 
-    private final NetworkQueryService networkQueryService;
+    private final TransitQueryService transitQueryService;
 
-    public TripController(NetworkQueryService networkQueryService) {
-        this.networkQueryService = networkQueryService;
+    public TripController(TransitQueryService transitQueryService) {
+        this.transitQueryService = transitQueryService;
     }
 
     @GetMapping("/{tripId}/stops")
     public List<TripStopResponse> stopsForTrip(@PathVariable String tripId) {
-        return networkQueryService.stopsForTrip(tripId);
+        return transitQueryService.stopsForTrip(tripId);
     }
 }

@@ -1,6 +1,6 @@
 import { cn } from "cn"
 
-import { vehicleLabel } from "@/data/network"
+import { vehicleLabel } from "@/lib/format"
 import { useRoutes } from "@/state/routes"
 
 export function LineBadge({ routeId }: { routeId: string }) {

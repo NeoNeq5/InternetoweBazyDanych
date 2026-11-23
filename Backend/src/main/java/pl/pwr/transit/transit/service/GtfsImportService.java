@@ -1,18 +1,9 @@
-package pl.pwr.transit.transit.application;
+package pl.pwr.transit.transit.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import pl.pwr.transit.transit.application.model.ParsedGtfsFeed;
-import pl.pwr.transit.transit.application.model.ParsedRoute;
-import pl.pwr.transit.transit.application.model.ParsedRouteShape;
-import pl.pwr.transit.transit.application.model.ParsedRouteStop;
-import pl.pwr.transit.transit.application.model.ParsedServiceDate;
-import pl.pwr.transit.transit.application.model.ParsedStop;
-import pl.pwr.transit.transit.application.model.ParsedTrip;
-import pl.pwr.transit.transit.application.port.GtfsFeedClient;
-import pl.pwr.transit.transit.application.port.GtfsFeedParser;
+import org.springframework.transaction.support.TransactionTemplate;
 import pl.pwr.transit.transit.entity.GtfsImport;
 import pl.pwr.transit.transit.entity.ImportStatus;
 import pl.pwr.transit.transit.entity.Route;
@@ -22,7 +13,17 @@ import pl.pwr.transit.transit.entity.ServiceDate;
 import pl.pwr.transit.transit.entity.ServiceDateId;
 import pl.pwr.transit.transit.entity.Stop;
 import pl.pwr.transit.transit.entity.Trip;
-import pl.pwr.transit.transit.infrastructure.gtfs.JdbcStopTimeImporter;
+import pl.pwr.transit.transit.gtfs.HttpGtfsFeedClient;
+import pl.pwr.transit.transit.gtfs.JdbcStopTimeImporter;
+import pl.pwr.transit.transit.gtfs.LatLon;
+import pl.pwr.transit.transit.gtfs.ParsedGtfsFeed;
+import pl.pwr.transit.transit.gtfs.ParsedRoute;
+import pl.pwr.transit.transit.gtfs.ParsedRouteShape;
+import pl.pwr.transit.transit.gtfs.ParsedRouteStop;
+import pl.pwr.transit.transit.gtfs.ParsedServiceDate;
+import pl.pwr.transit.transit.gtfs.ParsedStop;
+import pl.pwr.transit.transit.gtfs.ParsedTrip;
+import pl.pwr.transit.transit.gtfs.ZipCsvGtfsFeedParser;
 import pl.pwr.transit.transit.repository.GtfsImportRepository;
 import pl.pwr.transit.transit.repository.RouteRepository;
 import pl.pwr.transit.transit.repository.RouteShapeRepository;
@@ -30,14 +31,17 @@ import pl.pwr.transit.transit.repository.RouteStopRepository;
 import pl.pwr.transit.transit.repository.ServiceDateRepository;
 import pl.pwr.transit.transit.repository.StopRepository;
 import pl.pwr.transit.transit.repository.TripRepository;
+import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -46,8 +50,8 @@ public class GtfsImportService {
 
     private static final Logger log = LoggerFactory.getLogger(GtfsImportService.class);
 
-    private final GtfsFeedClient feedClient;
-    private final GtfsFeedParser feedParser;
+    private final HttpGtfsFeedClient feedClient;
+    private final ZipCsvGtfsFeedParser feedParser;
     private final GtfsImportRepository importRepository;
     private final RouteRepository routeRepository;
     private final StopRepository stopRepository;
@@ -56,10 +60,12 @@ public class GtfsImportService {
     private final RouteStopRepository routeStopRepository;
     private final ServiceDateRepository serviceDateRepository;
     private final JdbcStopTimeImporter stopTimeImporter;
+    private final TransactionTemplate transactionTemplate;
+    private final ObjectMapper objectMapper;
 
     public GtfsImportService(
-            GtfsFeedClient feedClient,
-            GtfsFeedParser feedParser,
+            HttpGtfsFeedClient feedClient,
+            ZipCsvGtfsFeedParser feedParser,
             GtfsImportRepository importRepository,
             RouteRepository routeRepository,
             StopRepository stopRepository,
@@ -67,7 +73,9 @@ public class GtfsImportService {
             TripRepository tripRepository,
             RouteStopRepository routeStopRepository,
             ServiceDateRepository serviceDateRepository,
-            JdbcStopTimeImporter stopTimeImporter
+            JdbcStopTimeImporter stopTimeImporter,
+            TransactionTemplate transactionTemplate,
+            ObjectMapper objectMapper
     ) {
         this.feedClient = feedClient;
         this.feedParser = feedParser;
@@ -79,15 +87,16 @@ public class GtfsImportService {
         this.routeStopRepository = routeStopRepository;
         this.serviceDateRepository = serviceDateRepository;
         this.stopTimeImporter = stopTimeImporter;
+        this.transactionTemplate = transactionTemplate;
+        this.objectMapper = objectMapper;
     }
 
-    @Transactional
     public GtfsImportResult importFeed() {
         GtfsImport importRecord = new GtfsImport();
         importRecord.setFetchedAt(Instant.now());
         importRecord.setChecksum("pending");
         importRecord.setStatus(ImportStatus.IN_PROGRESS);
-        final GtfsImport currentImport = importRepository.save(importRecord);
+        GtfsImport currentImport = importRepository.save(importRecord);
 
         try {
             byte[] archive = feedClient.downloadFeed();
@@ -95,18 +104,7 @@ public class GtfsImportService {
             currentImport.setChecksum(checksum);
 
             ParsedGtfsFeed feed = feedParser.parse(archive);
-            persistRoutes(feed, currentImport);
-            persistStops(feed, currentImport);
-            persistShapes(feed, currentImport);
-            stopTimeImporter.clear();
-            persistTrips(feed, currentImport);
-            persistRouteStops(feed);
-            persistServiceDates(feed);
-            int stopTimeCount = stopTimeImporter.importFromArchive(archive);
-
-            currentImport.setStatus(ImportStatus.SUCCESS);
-            currentImport.setErrorMessage(null);
-            importRepository.save(currentImport);
+            int stopTimeCount = persistFeed(feed, archive, currentImport.getId(), checksum);
 
             log.info(
                     "GTFS import #{} saved {} routes, {} stops, {} shapes, {} trips, {} route-stops, {} service-dates, {} stop-times",
@@ -133,6 +131,31 @@ public class GtfsImportService {
             log.error("GTFS import #{} failed", currentImport.getId(), ex);
             throw ex;
         }
+    }
+
+    private int persistFeed(ParsedGtfsFeed feed, byte[] archive, Long importId, String checksum) {
+        Integer count = transactionTemplate.execute(status -> {
+            GtfsImport managedImport = importRepository.findById(importId)
+                    .orElseThrow(() -> new IllegalStateException("GTFS import record not found: " + importId));
+            managedImport.setChecksum(checksum);
+
+            persistRoutes(feed, managedImport);
+            persistStops(feed, managedImport);
+            persistShapes(feed, managedImport);
+            stopTimeImporter.clear();
+            persistTrips(feed, managedImport);
+            persistRouteStops(feed);
+            persistServiceDates(feed);
+            stopRepository.flush();
+            tripRepository.flush();
+            int stopTimeCount = stopTimeImporter.importFromArchive(archive);
+
+            managedImport.setStatus(ImportStatus.SUCCESS);
+            managedImport.setErrorMessage(null);
+            importRepository.save(managedImport);
+            return stopTimeCount;
+        });
+        return count == null ? 0 : count;
     }
 
     private void persistRoutes(ParsedGtfsFeed feed, GtfsImport importRecord) {
@@ -199,16 +222,28 @@ public class GtfsImportService {
             RouteShape shape = new RouteShape();
             shape.setRouteId(parsed.routeId());
             shape.setDirectionId(parsed.directionId());
-            shape.setPointsJson(ShapePointsCodec.write(parsed.points()));
+            shape.setPointsJson(serializePoints(parsed.points()));
             shape.setLastImport(importRecord);
             routeShapeRepository.save(shape);
         }
     }
 
+    private String serializePoints(List<LatLon> points) {
+        List<double[]> coords = new ArrayList<>(points.size());
+        for (LatLon point : points) {
+            coords.add(new double[]{round6(point.lat()), round6(point.lon())});
+        }
+        return objectMapper.writeValueAsString(coords);
+    }
+
+    private static double round6(double value) {
+        return Math.round(value * 1_000_000.0) / 1_000_000.0;
+    }
+
     private void persistTrips(ParsedGtfsFeed feed, GtfsImport importRecord) {
         tripRepository.deleteAllTrips();
         Map<String, Route> routes = new HashMap<>();
-        java.util.ArrayList<Trip> batch = new java.util.ArrayList<>(500);
+        List<Trip> batch = new ArrayList<>(500);
         for (ParsedTrip parsed : feed.trips()) {
             Route route = routes.computeIfAbsent(
                     parsed.routeId(),
@@ -238,7 +273,7 @@ public class GtfsImportService {
 
     private void persistRouteStops(ParsedGtfsFeed feed) {
         routeStopRepository.deleteAllLinks();
-        java.util.ArrayList<RouteStop> batch = new java.util.ArrayList<>(500);
+        List<RouteStop> batch = new ArrayList<>(500);
         for (ParsedRouteStop parsed : feed.routeStops()) {
             if (!routeRepository.existsById(parsed.routeId()) || !stopRepository.existsById(parsed.stopId())) {
                 continue;
@@ -262,7 +297,7 @@ public class GtfsImportService {
 
     private void persistServiceDates(ParsedGtfsFeed feed) {
         serviceDateRepository.deleteAllServiceDates();
-        java.util.ArrayList<ServiceDate> batch = new java.util.ArrayList<>(500);
+        List<ServiceDate> batch = new ArrayList<>(500);
         for (ParsedServiceDate parsed : feed.serviceDates()) {
             ServiceDate serviceDate = new ServiceDate();
             serviceDate.setId(new ServiceDateId(parsed.serviceId(), parsed.date()));

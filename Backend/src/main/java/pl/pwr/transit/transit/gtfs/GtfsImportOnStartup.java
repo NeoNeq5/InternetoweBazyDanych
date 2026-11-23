@@ -1,4 +1,4 @@
-package pl.pwr.transit.transit.bootstrap;
+package pl.pwr.transit.transit.gtfs;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -6,7 +6,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 import pl.pwr.transit.config.GtfsProperties;
-import pl.pwr.transit.transit.application.GtfsImportService;
+import pl.pwr.transit.transit.service.GtfsImportService;
 
 @Component
 public class GtfsImportOnStartup implements ApplicationRunner {
