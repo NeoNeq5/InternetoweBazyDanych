@@ -1,0 +1,26 @@
+package pl.pwr.transit.transit.web;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import pl.pwr.transit.transit.application.NetworkQueryService;
+import pl.pwr.transit.transit.web.dto.TripStopResponse;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/trips")
+public class TripController {
+
+    private final NetworkQueryService networkQueryService;
+
+    public TripController(NetworkQueryService networkQueryService) {
+        this.networkQueryService = networkQueryService;
+    }
+
+    @GetMapping("/{tripId}/stops")
+    public List<TripStopResponse> stopsForTrip(@PathVariable String tripId) {
+        return networkQueryService.stopsForTrip(tripId);
+    }
+}

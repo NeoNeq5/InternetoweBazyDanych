@@ -6,15 +6,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.pwr.transit.transit.entity.Route;
 import pl.pwr.transit.transit.entity.RouteStop;
-import pl.pwr.transit.transit.entity.Stop;
+import pl.pwr.transit.transit.entity.VehicleType;
 import pl.pwr.transit.transit.repository.RouteRepository;
 import pl.pwr.transit.transit.repository.RouteStopRepository;
 import pl.pwr.transit.transit.repository.ServiceDateRepository;
 import pl.pwr.transit.transit.repository.StopRepository;
 import pl.pwr.transit.transit.repository.StopTimeRepository;
+import pl.pwr.transit.transit.repository.TripRepository;
 import pl.pwr.transit.transit.web.dto.DepartureResponse;
 import pl.pwr.transit.transit.web.dto.StopResponse;
 import pl.pwr.transit.transit.web.dto.StopRouteResponse;
+import pl.pwr.transit.transit.web.dto.TripStopResponse;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -36,19 +38,22 @@ public class NetworkQueryService {
     private final RouteStopRepository routeStopRepository;
     private final ServiceDateRepository serviceDateRepository;
     private final StopTimeRepository stopTimeRepository;
+    private final TripRepository tripRepository;
 
     public NetworkQueryService(
             StopRepository stopRepository,
             RouteRepository routeRepository,
             RouteStopRepository routeStopRepository,
             ServiceDateRepository serviceDateRepository,
-            StopTimeRepository stopTimeRepository
+            StopTimeRepository stopTimeRepository,
+            TripRepository tripRepository
     ) {
         this.stopRepository = stopRepository;
         this.routeRepository = routeRepository;
         this.routeStopRepository = routeStopRepository;
         this.serviceDateRepository = serviceDateRepository;
         this.stopTimeRepository = stopTimeRepository;
+        this.tripRepository = tripRepository;
     }
 
     @Transactional(readOnly = true)
@@ -103,11 +108,12 @@ public class NetworkQueryService {
     public List<DepartureResponse> upcomingDepartures(
             String stopId,
             String routeId,
-            short directionId,
+            Short directionId,
             int limit
     ) {
         requireStop(stopId);
-        if (!routeRepository.existsById(routeId)) {
+        boolean hasRoute = routeId != null && !routeId.isBlank();
+        if (hasRoute && !routeRepository.existsById(routeId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Route not found: " + routeId);
         }
 
@@ -125,30 +131,95 @@ public class NetworkQueryService {
         // Use wall-clock "now" even when falling back to the nearest GTFS service day.
         Duration from = Duration.between(today.atStartOfDay(WARSAW), now);
         String fromLiteral = from.getSeconds() + " seconds";
+        int clampedLimit = Math.min(Math.max(limit, 1), 30);
 
-        List<Object[]> rows = stopTimeRepository.findUpcomingDepartures(
-                stopId,
-                routeId,
-                directionId,
-                serviceIds,
-                fromLiteral,
-                Math.min(Math.max(limit, 1), 30)
-        );
+        List<Object[]> rows;
+        if (hasRoute && directionId != null) {
+            rows = stopTimeRepository.findUpcomingDepartures(
+                    stopId,
+                    routeId,
+                    directionId,
+                    serviceIds,
+                    fromLiteral,
+                    clampedLimit
+            );
+        } else if (hasRoute) {
+            rows = stopTimeRepository.findUpcomingDeparturesForRoute(
+                    stopId,
+                    routeId,
+                    serviceIds,
+                    fromLiteral,
+                    clampedLimit
+            );
+        } else {
+            rows = stopTimeRepository.findUpcomingDeparturesForStop(
+                    stopId,
+                    serviceIds,
+                    fromLiteral,
+                    clampedLimit
+            );
+        }
 
         List<DepartureResponse> departures = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
             Duration departure = toDuration(row[0]);
             String headsign = row[1] == null ? "" : String.valueOf(row[1]);
             String tripId = String.valueOf(row[2]);
+            String rowRouteId = String.valueOf(row[3]);
+            String routeShortName = String.valueOf(row[4]);
+            VehicleType vehicleType = VehicleType.valueOf(String.valueOf(row[5]));
+            short rowDirectionId = ((Number) row[6]).shortValue();
             long minutesUntil = Math.max(0, (departure.getSeconds() - from.getSeconds() + 59) / 60);
             departures.add(new DepartureResponse(
                     tripId,
+                    rowRouteId,
+                    routeShortName,
+                    vehicleType,
+                    rowDirectionId,
                     headsign,
                     formatClock(departure),
                     minutesUntil
             ));
         }
         return departures;
+    }
+
+    @Transactional(readOnly = true)
+    public List<TripStopResponse> stopsForTrip(String tripId) {
+        if (!tripRepository.existsById(tripId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Trip not found: " + tripId);
+        }
+
+        ZonedDateTime now = ZonedDateTime.now(WARSAW);
+        LocalDate today = now.toLocalDate();
+        Duration from = Duration.between(today.atStartOfDay(WARSAW), now);
+
+        List<Object[]> rows = stopTimeRepository.findStopsForTrip(tripId);
+        List<TripStopResponse> stops = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            int stopSequence = ((Number) row[0]).intValue();
+            String stopId = String.valueOf(row[1]);
+            String stopName = String.valueOf(row[2]);
+            double lat = ((Number) row[3]).doubleValue();
+            double lon = ((Number) row[4]).doubleValue();
+            Duration arrival = toDuration(row[5]);
+            Duration departure = toDuration(row[6]);
+            long diffSeconds = arrival.getSeconds() - from.getSeconds();
+            long minutesUntil = diffSeconds >= 0
+                    ? (diffSeconds + 59) / 60
+                    : Math.floorDiv(diffSeconds, 60);
+            stops.add(new TripStopResponse(
+                    stopSequence,
+                    stopId,
+                    stopName,
+                    lat,
+                    lon,
+                    formatClock(arrival),
+                    formatClock(departure),
+                    minutesUntil
+            ));
+        }
+        return stops;
     }
 
     private LocalDate resolveServiceDay(LocalDate today) {

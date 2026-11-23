@@ -40,8 +40,8 @@ public class StopController {
     @GetMapping("/{stopId}/departures")
     public List<DepartureResponse> departures(
             @PathVariable String stopId,
-            @RequestParam String routeId,
-            @RequestParam short directionId,
+            @RequestParam(required = false) String routeId,
+            @RequestParam(required = false) Short directionId,
             @RequestParam(defaultValue = "12") int limit
     ) {
         return networkQueryService.upcomingDepartures(stopId, routeId, directionId, limit);

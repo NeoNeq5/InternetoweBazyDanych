@@ -37,11 +37,17 @@ function Root() {
     clearNotice()
   }
 
+  function onLogout() {
+    clearNotice()
+    setSection("pulpit")
+    setEntered(false)
+  }
+
   return (
     <DeskFrame
       section={section}
       onSection={onSection}
-      onLogout={() => setEntered(false)}
+      onLogout={onLogout}
     >
       {section === "pulpit" ? <PulpitPage onSection={onSection} /> : null}
       {section === "portfel" ? <WalletPage /> : null}

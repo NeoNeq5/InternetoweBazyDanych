@@ -1,4 +1,4 @@
-import type { RouteDto } from "@/api/routes"
+import type { RouteDto, VehicleType } from "@/api/routes"
 import type { StopDto } from "@/api/stops"
 
 export type DirectionOption = {
@@ -12,7 +12,22 @@ export type StopRouteDto = RouteDto & {
 
 export type DepartureDto = {
   tripId: string
+  routeId: string
+  routeShortName: string
+  vehicleType: VehicleType
+  directionId: number
   headsign: string
+  departureTime: string
+  minutesUntil: number
+}
+
+export type TripStopDto = {
+  stopSequence: number
+  stopId: string
+  stopName: string
+  lat: number
+  lon: number
+  arrivalTime: string
   departureTime: string
   minutesUntil: number
 }
@@ -48,21 +63,44 @@ export async function fetchStopsForRouteDirection(
 
 export async function fetchDepartures(
   stopId: string,
-  routeId: string,
-  directionId: number,
+  options?: {
+    routeId?: string
+    directionId?: number | null
+    limit?: number
+  },
   signal?: AbortSignal
 ): Promise<DepartureDto[]> {
-  const params = new URLSearchParams({
-    routeId,
-    directionId: String(directionId),
-    limit: "12",
-  })
+  const params = new URLSearchParams()
+  if (options?.routeId) {
+    params.set("routeId", options.routeId)
+    if (options.directionId != null) {
+      params.set("directionId", String(options.directionId))
+    }
+  }
+  params.set("limit", String(options?.limit ?? (options?.routeId ? 12 : 20)))
+
   const response = await fetch(
     `/api/stops/${encodeURIComponent(stopId)}/departures?${params}`,
     { signal }
   )
   if (!response.ok) {
     throw new Error(`Nie udało się pobrać odjazdów (${response.status})`)
+  }
+  return response.json()
+}
+
+export async function fetchTripStops(
+  tripId: string,
+  signal?: AbortSignal
+): Promise<TripStopDto[]> {
+  const response = await fetch(
+    `/api/trips/${encodeURIComponent(tripId)}/stops`,
+    { signal }
+  )
+  if (!response.ok) {
+    throw new Error(
+      `Nie udało się pobrać przystanków przejazdu (${response.status})`
+    )
   }
   return response.json()
 }

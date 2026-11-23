@@ -95,6 +95,8 @@ export type SearchEntry = {
   searchedAt: string
 }
 
+export const demoEmail = "anna.kowalska@pwr.edu.pl"
+
 type State = {
   email: string
   role: "PASSENGER"
@@ -107,6 +109,16 @@ type State = {
   notice: string
 }
 
+type AccountRecord = {
+  password: string | null
+  state: State
+}
+
+type Store = {
+  activeEmail: string
+  accounts: Record<string, AccountRecord>
+}
+
 type Action =
   | { type: "topup"; amountCents: number; at: string }
   | { type: "buy"; ticketTypeId: string; at: string }
@@ -115,6 +127,8 @@ type Action =
   | { type: "toggle-favorite"; stopId: string }
   | { type: "search"; query: string; at: string }
   | { type: "clear-notice" }
+  | { type: "sign-in"; email: string }
+  | { type: "register"; email: string; password: string }
 
 function atPast(days: number, hour: number, minute: number) {
   const date = new Date()
@@ -126,10 +140,24 @@ function atPast(days: number, hour: number, minute: number) {
   return date.toISOString()
 }
 
-function seed(): State {
+function emptyAccount(email: string, notice = ""): State {
+  return {
+    email,
+    role: "PASSENGER",
+    balanceCents: 0,
+    tickets: [],
+    transactions: [],
+    penalties: [],
+    favoriteStopIds: [],
+    searches: [],
+    notice,
+  }
+}
+
+function seed(email = demoEmail): State {
   const now = Date.now()
   return {
-    email: "anna.kowalska@pwr.edu.pl",
+    email,
     role: "PASSENGER",
     balanceCents: 2320,
     tickets: [
@@ -235,7 +263,84 @@ function ticketCode(at: string, typeId: string) {
   return `TR-${stamp.slice(-4)}${typeId.toUpperCase()}`
 }
 
-function reducer(state: State, action: Action): State {
+function initialStore(): Store {
+  return {
+    activeEmail: demoEmail,
+    accounts: {
+      [demoEmail]: {
+        password: null,
+        state: seed(demoEmail),
+      },
+    },
+  }
+}
+
+function storeReducer(store: Store, action: Action): Store {
+  if (action.type === "sign-in") {
+    const email = action.email.trim().toLowerCase()
+    const existing = store.accounts[email]
+    if (existing) {
+      return {
+        ...store,
+        activeEmail: email,
+        accounts: {
+          ...store.accounts,
+          [email]: {
+            ...existing,
+            state: { ...existing.state, notice: "" },
+          },
+        },
+      }
+    }
+    return {
+      activeEmail: email,
+      accounts: {
+        ...store.accounts,
+        [email]: {
+          password: null,
+          state: seed(email),
+        },
+      },
+    }
+  }
+
+  if (action.type === "register") {
+    const email = action.email.trim().toLowerCase()
+    return {
+      activeEmail: email,
+      accounts: {
+        ...store.accounts,
+        [email]: {
+          password: action.password,
+          state: emptyAccount(email, `Utworzono konto ${email}.`),
+        },
+      },
+    }
+  }
+
+  const current = store.accounts[store.activeEmail]
+  if (!current) {
+    return store
+  }
+  const nextState = accountReducer(current.state, action)
+  if (nextState === current.state) {
+    return store
+  }
+  return {
+    ...store,
+    accounts: {
+      ...store.accounts,
+      [store.activeEmail]: {
+        ...current,
+        state: nextState,
+      },
+    },
+  }
+}
+
+type AccountAction = Exclude<Action, { type: "sign-in" } | { type: "register" }>
+
+function accountReducer(state: State, action: AccountAction): State {
   switch (action.type) {
     case "clear-notice":
       return { ...state, notice: "" }
@@ -387,7 +492,11 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+type AuthResult = { ok: true } | { ok: false; error: string }
+
 type AccountApi = State & {
+  signIn: (email: string, password: string) => AuthResult
+  register: (email: string, password: string) => AuthResult
   topUp: (amountCents: number) => void
   buy: (ticketTypeId: string) => void
   validate: (ticketId: string, routeId: string) => void
@@ -400,10 +509,29 @@ type AccountApi = State & {
 const AccountContext = createContext<AccountApi | null>(null)
 
 export function AccountProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, seed)
+  const [store, dispatch] = useReducer(storeReducer, undefined, initialStore)
+  const state = store.accounts[store.activeEmail]?.state ?? seed(demoEmail)
+
   const api = useMemo<AccountApi>(
     () => ({
       ...state,
+      signIn: (rawEmail, password) => {
+        const email = rawEmail.trim().toLowerCase()
+        const existing = store.accounts[email]
+        if (existing && existing.password !== null && existing.password !== password) {
+          return { ok: false, error: "Nieprawidłowy adres e-mail lub hasło." }
+        }
+        dispatch({ type: "sign-in", email })
+        return { ok: true }
+      },
+      register: (rawEmail, password) => {
+        const email = rawEmail.trim().toLowerCase()
+        if (store.accounts[email]) {
+          return { ok: false, error: "Konto z tym adresem e-mail już istnieje." }
+        }
+        dispatch({ type: "register", email, password })
+        return { ok: true }
+      },
       topUp: (amountCents) =>
         dispatch({ type: "topup", amountCents, at: new Date().toISOString() }),
       buy: (ticketTypeId) =>
@@ -422,7 +550,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "search", query, at: new Date().toISOString() }),
       clearNotice: () => dispatch({ type: "clear-notice" }),
     }),
-    [state]
+    [state, store.accounts]
   )
 
   return (

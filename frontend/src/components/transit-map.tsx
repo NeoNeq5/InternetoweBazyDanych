@@ -6,12 +6,13 @@ import {
   Popup,
   TileLayer,
   useMap,
+  useMapEvents,
 } from "react-leaflet"
-import type { LatLngExpression } from "leaflet"
+import { DomEvent, type LatLngExpression } from "leaflet"
 
+import type { RouteDto } from "@/api/routes"
 import type { RouteShapeDto } from "@/api/shapes"
 import type { StopDto } from "@/api/stops"
-import type { RouteDto } from "@/api/routes"
 
 import "leaflet/dist/leaflet.css"
 
@@ -53,16 +54,42 @@ function FitView({
   return null
 }
 
+function MapInteraction({
+  highlightedStopId,
+  onDeselectStop,
+}: {
+  highlightedStopId: string | null
+  onDeselectStop?: () => void
+}) {
+  const map = useMap()
+
+  useMapEvents({
+    click: () => {
+      onDeselectStop?.()
+    },
+  })
+
+  useEffect(() => {
+    if (!highlightedStopId) {
+      map.closePopup()
+    }
+  }, [highlightedStopId, map])
+
+  return null
+}
+
 export function TransitMap({
   stops,
   highlightedStopId,
   onSelectStop,
+  onDeselectStop,
   shapes,
   route,
 }: {
   stops: StopDto[]
   highlightedStopId: string | null
   onSelectStop: (stopId: string) => void
+  onDeselectStop?: () => void
   shapes: RouteShapeDto[]
   route: RouteDto | null
 }) {
@@ -83,6 +110,10 @@ export function TransitMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <FitView stops={stops} shapes={shapes} />
+      <MapInteraction
+        highlightedStopId={highlightedStopId}
+        onDeselectStop={onDeselectStop}
+      />
       {shapes.map((shape) => (
         <Polyline
           key={shape.directionId}
@@ -110,7 +141,10 @@ export function TransitMap({
               weight: active ? 2 : 1,
             }}
             eventHandlers={{
-              click: () => onSelectStop(stop.id),
+              click: (event) => {
+                DomEvent.stopPropagation(event)
+                onSelectStop(stop.id)
+              },
             }}
           >
             <Popup>
