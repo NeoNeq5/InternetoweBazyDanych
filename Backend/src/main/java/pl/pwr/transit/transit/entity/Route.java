@@ -8,10 +8,14 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "routes")
@@ -40,4 +44,7 @@ public class Route {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "last_import_id")
     private GtfsImport lastImport;
+
+    @OneToMany(mappedBy = "route", fetch = FetchType.LAZY)
+    private Set<RouteStop> stopLinks = new HashSet<>();
 }

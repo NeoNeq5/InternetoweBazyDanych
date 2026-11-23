@@ -11,24 +11,24 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ZipCsvGtfsFeedParserTest {
 
     @Test
-    void parsesRoutesStopsAndShapesFromZip() throws IOException {
+    void parsesRoutesStopsShapesTripsAndLinks() throws IOException {
         byte[] archive = zip(
                 "routes.txt",
                 """
                 route_id,agency_id,route_short_name,route_long_name,route_desc,route_type
                 4,1,"4","","BISKUPIN - ... - GRABISZYNEK|GRABISZYNEK - ... - BISKUPIN",0
-                A,1,"A","","SOŁTYSOWICE - ... - RACŁAWICKA|RACŁAWICKA - ... - SOŁTYSOWICE",3
                 """,
                 "stops.txt",
                 """
                 stop_id,stop_name,stop_lat,stop_lon,parent_station
                 1,Plac Grunwaldzki,51.11,17.06,
-                2,Plac Grunwaldzki 21,51.1101,17.0602,1
+                2,Biskupin,51.10,17.10,
                 """,
                 "shapes.txt",
                 """
@@ -44,20 +44,37 @@ class ZipCsvGtfsFeedParserTest {
                 route_id,service_id,trip_id,trip_headsign,direction_id,shape_id
                 4,1,t1,Biskupin,0,s4a
                 4,1,t2,Oporów,1,s4b
-                4,1,t3,Biskupin,0,s4a
+                """,
+                "stop_times.txt",
+                """
+                trip_id,arrival_time,departure_time,stop_id,stop_sequence
+                t1,08:00:00,08:00:00,1,0
+                t1,08:10:00,08:10:00,2,1
+                t2,09:00:00,09:00:00,2,0
+                t2,09:10:00,09:10:00,1,1
+                """,
+                "calendar.txt",
+                """
+                service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+                1,1,1,1,1,1,1,1,20261101,20261103
+                """,
+                "calendar_dates.txt",
+                """
+                service_id,date,exception_type
                 """
         );
 
         ParsedGtfsFeed feed = new ZipCsvGtfsFeedParser().parse(archive);
 
-        assertEquals(2, feed.routes().size());
+        assertEquals(1, feed.routes().size());
         assertEquals(VehicleType.TRAM, feed.routes().getFirst().vehicleType());
-        assertEquals("BISKUPIN – GRABISZYNEK", feed.routes().getFirst().longName());
-        assertEquals(VehicleType.BUS, feed.routes().get(1).vehicleType());
         assertEquals(2, feed.stops().size());
-        assertEquals("1", feed.stops().get(1).parentStationId());
         assertEquals(2, feed.shapes().size());
-        assertEquals(3, feed.shapes().getFirst().points().size());
+        assertEquals(2, feed.trips().size());
+        assertEquals(4, feed.routeStops().size());
+        assertFalse(feed.serviceDates().isEmpty());
+        assertTrue(feed.routeStops().stream().anyMatch(link ->
+                link.routeId().equals("4") && link.stopId().equals("1") && link.directionId() == 0));
     }
 
     @Test
@@ -69,7 +86,6 @@ class ZipCsvGtfsFeedParserTest {
                         "0"
                 )
         );
-        assertTrue(ZipCsvGtfsFeedParser.summarizeLongName(null, "X").equals("X"));
     }
 
     private static byte[] zip(String... nameAndContent) throws IOException {

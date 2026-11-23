@@ -44,7 +44,10 @@ function FitView({
       map.setView(points[0], 15)
       return
     }
-    map.fitBounds(points as [number, number][], { padding: [36, 36], maxZoom: 15 })
+    map.fitBounds(points as [number, number][], {
+      padding: [36, 36],
+      maxZoom: 15,
+    })
   }, [map, shapes, stops])
 
   return null
@@ -68,11 +71,6 @@ export function TransitMap({
       ? "oklch(0.62 0.12 75)"
       : "oklch(0.42 0.12 255)"
 
-  const fitStops =
-    highlightedStopId != null
-      ? stops.filter((stop) => stop.id === highlightedStopId)
-      : []
-
   return (
     <MapContainer
       center={WROCLAW_CENTER}
@@ -84,7 +82,7 @@ export function TransitMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <FitView stops={fitStops} shapes={shapes} />
+      <FitView stops={stops} shapes={shapes} />
       {shapes.map((shape) => (
         <Polyline
           key={shape.directionId}
@@ -102,10 +100,12 @@ export function TransitMap({
           <CircleMarker
             key={stop.id}
             center={[stop.lat, stop.lon]}
-            radius={active ? 8 : 4}
+            radius={active ? 8 : 5}
             pathOptions={{
               color: active ? "oklch(0.22 0.03 255)" : "oklch(0.45 0.02 255)",
-              fillColor: active ? "oklch(0.42 0.12 255)" : "oklch(0.97 0.01 95)",
+              fillColor: active
+                ? "oklch(0.42 0.12 255)"
+                : "oklch(0.97 0.01 95)",
               fillOpacity: 1,
               weight: active ? 2 : 1,
             }}

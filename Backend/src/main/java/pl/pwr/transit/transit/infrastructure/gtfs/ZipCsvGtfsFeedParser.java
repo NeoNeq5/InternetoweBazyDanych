@@ -5,7 +5,10 @@ import pl.pwr.transit.transit.application.model.LatLon;
 import pl.pwr.transit.transit.application.model.ParsedGtfsFeed;
 import pl.pwr.transit.transit.application.model.ParsedRoute;
 import pl.pwr.transit.transit.application.model.ParsedRouteShape;
+import pl.pwr.transit.transit.application.model.ParsedRouteStop;
+import pl.pwr.transit.transit.application.model.ParsedServiceDate;
 import pl.pwr.transit.transit.application.model.ParsedStop;
+import pl.pwr.transit.transit.application.model.ParsedTrip;
 import pl.pwr.transit.transit.application.port.GtfsFeedParser;
 import pl.pwr.transit.transit.entity.VehicleType;
 
@@ -14,11 +17,16 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -26,17 +34,29 @@ import java.util.zip.ZipInputStream;
 public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
 
     private static final int MAX_SHAPE_POINTS = 400;
+    private static final DateTimeFormatter GTFS_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     @Override
     public ParsedGtfsFeed parse(byte[] archiveBytes) {
         Map<String, byte[]> files = readEntries(archiveBytes);
-        List<ParsedRoute> routes = parseRoutes(requireFile(files, "routes.txt"));
-        List<ParsedStop> stops = parseStops(requireFile(files, "stops.txt"));
-        List<ParsedRouteShape> shapes = parseRouteShapes(
-                requireFile(files, "shapes.txt"),
-                requireFile(files, "trips.txt")
+        byte[] tripsContent = requireFile(files, "trips.txt");
+        List<ParsedTrip> trips = parseTrips(tripsContent);
+        Map<String, ParsedTrip> tripsById = new HashMap<>(trips.size() * 2);
+        for (ParsedTrip trip : trips) {
+            tripsById.put(trip.id(), trip);
+        }
+
+        return new ParsedGtfsFeed(
+                List.copyOf(parseRoutes(requireFile(files, "routes.txt"))),
+                List.copyOf(parseStops(requireFile(files, "stops.txt"))),
+                List.copyOf(parseRouteShapes(requireFile(files, "shapes.txt"), tripsContent)),
+                List.copyOf(trips),
+                List.copyOf(parseRouteStops(requireFile(files, "stop_times.txt"), tripsById)),
+                List.copyOf(parseServiceDates(
+                        files.get("calendar.txt"),
+                        files.get("calendar_dates.txt")
+                ))
         );
-        return new ParsedGtfsFeed(List.copyOf(routes), List.copyOf(stops), List.copyOf(shapes));
     }
 
     private static Map<String, byte[]> readEntries(byte[] archiveBytes) {
@@ -52,13 +72,7 @@ public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
                 if (slash >= 0) {
                     name = name.substring(slash + 1);
                 }
-                String key = name.toLowerCase();
-                // Skip the huge stop_times table — not needed for routes/stops/shapes.
-                if ("stop_times.txt".equals(key)) {
-                    zip.closeEntry();
-                    continue;
-                }
-                files.put(key, zip.readAllBytes());
+                files.put(name.toLowerCase(), zip.readAllBytes());
             }
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read GTFS ZIP archive", ex);
@@ -93,7 +107,6 @@ public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
                 if (shortName == null) {
                     shortName = id;
                 }
-                // Wrocław puts the itinerary in route_desc and leaves route_long_name empty.
                 String longNameRaw = firstNonBlank(
                         GtfsCsv.optional(fields, index, "route_long_name"),
                         GtfsCsv.optional(fields, index, "route_desc")
@@ -133,6 +146,164 @@ public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
             throw new IllegalStateException("Failed to parse stops.txt", ex);
         }
         return stops;
+    }
+
+    private static List<ParsedTrip> parseTrips(byte[] content) {
+        List<ParsedTrip> trips = new ArrayList<>();
+        try (BufferedReader reader = reader(content)) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) {
+                return trips;
+            }
+            Map<String, Integer> index = GtfsCsv.headerIndex(GtfsCsv.parseLine(stripBom(headerLine)));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                List<String> fields = GtfsCsv.parseLine(line);
+                String directionRaw = GtfsCsv.optional(fields, index, "direction_id");
+                short directionId = directionRaw == null ? 0 : Short.parseShort(directionRaw);
+                trips.add(new ParsedTrip(
+                        GtfsCsv.required(fields, index, "trip_id"),
+                        GtfsCsv.required(fields, index, "route_id"),
+                        GtfsCsv.required(fields, index, "service_id"),
+                        directionId,
+                        GtfsCsv.optional(fields, index, "trip_headsign")
+                ));
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to parse trips.txt", ex);
+        }
+        return trips;
+    }
+
+    private static List<ParsedRouteStop> parseRouteStops(byte[] stopTimesContent, Map<String, ParsedTrip> tripsById) {
+        Map<String, ParsedRouteStop> links = new LinkedHashMap<>();
+        try (BufferedReader reader = reader(stopTimesContent)) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) {
+                return List.of();
+            }
+            Map<String, Integer> index = GtfsCsv.headerIndex(GtfsCsv.parseLine(stripBom(headerLine)));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                List<String> fields = GtfsCsv.parseLine(line);
+                String tripId = GtfsCsv.required(fields, index, "trip_id");
+                ParsedTrip trip = tripsById.get(tripId);
+                if (trip == null) {
+                    continue;
+                }
+                String stopId = GtfsCsv.required(fields, index, "stop_id");
+                int sequence = Integer.parseInt(GtfsCsv.required(fields, index, "stop_sequence"));
+                String key = trip.routeId() + "|" + stopId + "|" + trip.directionId();
+                ParsedRouteStop existing = links.get(key);
+                if (existing == null || sequence < existing.stopSequence()) {
+                    links.put(key, new ParsedRouteStop(
+                            trip.routeId(),
+                            stopId,
+                            trip.directionId(),
+                            sequence,
+                            trip.headsign()
+                    ));
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to parse stop_times.txt for route-stop links", ex);
+        }
+        return new ArrayList<>(links.values());
+    }
+
+    private static List<ParsedServiceDate> parseServiceDates(byte[] calendarContent, byte[] calendarDatesContent) {
+        Set<String> dates = new HashSet<>();
+        Map<String, boolean[]> weekMask = new HashMap<>();
+        Map<String, LocalDate> starts = new HashMap<>();
+        Map<String, LocalDate> ends = new HashMap<>();
+
+        if (calendarContent != null) {
+            try (BufferedReader reader = reader(calendarContent)) {
+                String headerLine = reader.readLine();
+                if (headerLine != null) {
+                    Map<String, Integer> index = GtfsCsv.headerIndex(GtfsCsv.parseLine(stripBom(headerLine)));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.isBlank()) {
+                            continue;
+                        }
+                        List<String> fields = GtfsCsv.parseLine(line);
+                        String serviceId = GtfsCsv.required(fields, index, "service_id");
+                        boolean[] mask = {
+                                "1".equals(GtfsCsv.required(fields, index, "monday")),
+                                "1".equals(GtfsCsv.required(fields, index, "tuesday")),
+                                "1".equals(GtfsCsv.required(fields, index, "wednesday")),
+                                "1".equals(GtfsCsv.required(fields, index, "thursday")),
+                                "1".equals(GtfsCsv.required(fields, index, "friday")),
+                                "1".equals(GtfsCsv.required(fields, index, "saturday")),
+                                "1".equals(GtfsCsv.required(fields, index, "sunday"))
+                        };
+                        weekMask.put(serviceId, mask);
+                        starts.put(serviceId, LocalDate.parse(GtfsCsv.required(fields, index, "start_date"), GTFS_DATE));
+                        ends.put(serviceId, LocalDate.parse(GtfsCsv.required(fields, index, "end_date"), GTFS_DATE));
+                    }
+                }
+            } catch (IOException ex) {
+                throw new IllegalStateException("Failed to parse calendar.txt", ex);
+            }
+        }
+
+        for (Map.Entry<String, boolean[]> entry : weekMask.entrySet()) {
+            String serviceId = entry.getKey();
+            LocalDate cursor = starts.get(serviceId);
+            LocalDate end = ends.get(serviceId);
+            boolean[] mask = entry.getValue();
+            while (!cursor.isAfter(end)) {
+                if (mask[dayIndex(cursor.getDayOfWeek())]) {
+                    dates.add(serviceId + "|" + cursor);
+                }
+                cursor = cursor.plusDays(1);
+            }
+        }
+
+        if (calendarDatesContent != null) {
+            try (BufferedReader reader = reader(calendarDatesContent)) {
+                String headerLine = reader.readLine();
+                if (headerLine != null) {
+                    Map<String, Integer> index = GtfsCsv.headerIndex(GtfsCsv.parseLine(stripBom(headerLine)));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.isBlank()) {
+                            continue;
+                        }
+                        List<String> fields = GtfsCsv.parseLine(line);
+                        String serviceId = GtfsCsv.required(fields, index, "service_id");
+                        LocalDate date = LocalDate.parse(GtfsCsv.required(fields, index, "date"), GTFS_DATE);
+                        int exceptionType = Integer.parseInt(GtfsCsv.required(fields, index, "exception_type"));
+                        String key = serviceId + "|" + date;
+                        if (exceptionType == 1) {
+                            dates.add(key);
+                        } else if (exceptionType == 2) {
+                            dates.remove(key);
+                        }
+                    }
+                }
+            } catch (IOException ex) {
+                throw new IllegalStateException("Failed to parse calendar_dates.txt", ex);
+            }
+        }
+
+        List<ParsedServiceDate> result = new ArrayList<>(dates.size());
+        for (String key : dates) {
+            int sep = key.indexOf('|');
+            result.add(new ParsedServiceDate(key.substring(0, sep), LocalDate.parse(key.substring(sep + 1))));
+        }
+        return result;
+    }
+
+    private static int dayIndex(DayOfWeek day) {
+        return day.getValue() - 1;
     }
 
     private static List<ParsedRouteShape> parseRouteShapes(byte[] shapesContent, byte[] tripsContent) {
@@ -216,8 +387,7 @@ public class ZipCsvGtfsFeedParser implements GtfsFeedParser {
                 }
                 String directionRaw = GtfsCsv.optional(fields, index, "direction_id");
                 short directionId = directionRaw == null ? 0 : Short.parseShort(directionRaw);
-                String key = routeId + "|" + directionId;
-                chosen.putIfAbsent(key, shapeId);
+                chosen.putIfAbsent(routeId + "|" + directionId, shapeId);
             }
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to parse trips.txt", ex);

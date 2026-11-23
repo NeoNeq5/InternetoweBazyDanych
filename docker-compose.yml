@@ -24,6 +24,9 @@ services:
         condition: service_healthy
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/transit_db
+      - JAVA_TOOL_OPTIONS=-Xmx1024m
+      - TRANSIT_GTFS_IMPORT_ON_STARTUP=true
+
   frontend:
     build:
       context: ./frontend
